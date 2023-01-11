@@ -51,14 +51,14 @@ def calculate_similarity(X, vectorizor, query, top_k=5):
     most_similar_doc_indices = np.argsort(cosine_similarities, axis=0)[:-top_k-1:-1]
     return (most_similar_doc_indices, cosine_similarities)
 
-def show_similar_documents(df, cosine_similarities, similar_doc_indices):
-    """ Prints the most similar documents using indices in the `similar_doc_indices` vector."""
-    counter = 1
-    for index in similar_doc_indices:
-        st.write('Top-{}, Similarity = {}'.format(counter, cosine_similarities[index]))
-        st.write('body: {}, '.format(df[index]))
-        st.write()
-        counter += 1
+# def show_similar_documents(df, cosine_similarities, similar_doc_indices):
+#     """ Prints the most similar documents using indices in the `similar_doc_indices` vector."""
+#     counter = 1
+#     for index in similar_doc_indices:
+#         st.write('Top-{}, Similarity = {}'.format(counter, cosine_similarities[index]))
+#         st.write('body: {}, '.format(df[index]))
+#         st.write()
+#         counter += 1
 
 
 #  Read Vanguard Dataframe
@@ -82,13 +82,16 @@ vanguard_col = [tup[0] for tup in vanguard_col]
 vanguard_df = pd.DataFrame(vanguard_data, columns=vanguard_col)
 
  # Preprocess the corpus
-data = [preprocess(title, body) for title, body in zip(vanguard_df['article_title'], vanguard_df['content'])] 
+data = [preprocess(title, body) for title, body in zip(vanguard_df['title'], vanguard_df['content'])] 
 
 print('creating tfidf matrix...')
 # Learn vocabulary and idf, return term-document matrix
 X,v = create_tfidf_features(data)
 features = v.get_feature_names_out()
-len(features)
+vanguard_df.columns = [col.upper() for col in vanguard_df.columns]
+
+bow_df = pd.DataFrame(X.toarray(), columns= features)
+final_df = pd.concat([bow_df, vanguard_df], axis=1)
 
 user_question = [query]
 # search_start = time.time()
@@ -96,6 +99,6 @@ sim_vecs, cosine_similarities = calculate_similarity(X, v, user_question)
 # search_time = time.time() - search_start
 # print("search time: {:.2f} ms".format(search_time * 1000))
 # print()
-show_similar_documents(data, cosine_similarities, sim_vecs)
-
-
+# show_similar_documents(data, cosine_similarities, sim_vecs)
+final_df = final_df.iloc[sim_vecs]
+st.dataframe(final_df[['COMPANY', 'TOPIC', 'TITLE', 'DATE', 'LINK', 'CONTENT']])
