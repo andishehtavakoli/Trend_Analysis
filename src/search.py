@@ -4,14 +4,10 @@ import re
 import time
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from utils import DataBaseClass
+from helper_functions import read_columns, read_data
 
-import streamlit as st
-st.header('Insight Recommendation')  # header for webapp
-st.image('https://builtin.com/sites/www.builtin.com/files/styles/og/public/recommendation-system-machine-learning_1.jpg')
-query = st.text_input('Ask your query:')
 
-#export
+    #export
 def preprocess(title, body=None):
     """ Preprocess the input, i.e. lowercase, remove html tags, special character and digits."""
     text = ''
@@ -32,9 +28,9 @@ def preprocess(title, body=None):
 def create_tfidf_features(corpus, max_features=5000, max_df=0.95, min_df=2):
     """ Creates a tf-idf matrix for the `corpus` using sklearn. """
     tfidf_vectorizor = TfidfVectorizer(decode_error='replace', strip_accents='unicode', analyzer='word', 
-                                       stop_words='english', ngram_range=(1, 1), max_features=max_features, 
-                                       norm='l2', use_idf=True, smooth_idf=True, sublinear_tf=True,
-                                       max_df=max_df, min_df=min_df)
+                                    stop_words='english', ngram_range=(1, 1), max_features=max_features, 
+                                    norm='l2', use_idf=True, smooth_idf=True, sublinear_tf=True,
+                                    max_df=max_df, min_df=min_df)
     X = tfidf_vectorizor.fit_transform(corpus)
     print('tfidf matrix successfully created.')
     return X, tfidf_vectorizor
@@ -51,54 +47,24 @@ def calculate_similarity(X, vectorizor, query, top_k=5):
     most_similar_doc_indices = np.argsort(cosine_similarities, axis=0)[:-top_k-1:-1]
     return (most_similar_doc_indices, cosine_similarities)
 
-# def show_similar_documents(df, cosine_similarities, similar_doc_indices):
-#     """ Prints the most similar documents using indices in the `similar_doc_indices` vector."""
-#     counter = 1
-#     for index in similar_doc_indices:
-#         st.write('Top-{}, Similarity = {}'.format(counter, cosine_similarities[index]))
-#         st.write('body: {}, '.format(df[index]))
-#         st.write()
-#         counter += 1
 
+def most_similar_article(query):
 
-#  Read Vanguard Dataframe
-obj_data_base_class = DataBaseClass('guest', 'Aa12345', 'localhost', 5432, 'insights_db')
+    company_insight_df = pd.DataFrame(read_data(), columns=read_columns())
 
-vanguard_command = """select * from insights_data"""
+    # Preprocess the corpus
+    data = [preprocess(title, body) for title, body in zip(company_insight_df['title'], company_insight_df['content'])] 
 
-vanguard_data = obj_data_base_class.db_query(
-    command=vanguard_command,
-    read_query=True
-)
-
-vanguard_col_command = """select column_name from information_schema.columns where table_name='insights_data'"""
-
-vanguard_col = obj_data_base_class.db_query(
+   
+    # Learn vocabulary and idf, return term-document matrix
+    X,v = create_tfidf_features(data)
     
-    command=vanguard_col_command,
-    read_query=True
-)
-vanguard_col = [tup[0] for tup in vanguard_col]
-vanguard_df = pd.DataFrame(vanguard_data, columns=vanguard_col)
+    bow_df = pd.DataFrame(X.toarray())
+    final_df = pd.concat([bow_df, company_insight_df], axis=1)
 
- # Preprocess the corpus
-data = [preprocess(title, body) for title, body in zip(vanguard_df['title'], vanguard_df['content'])] 
-
-print('creating tfidf matrix...')
-# Learn vocabulary and idf, return term-document matrix
-X,v = create_tfidf_features(data)
-features = v.get_feature_names_out()
-vanguard_df.columns = [col.upper() for col in vanguard_df.columns]
-
-bow_df = pd.DataFrame(X.toarray(), columns= features)
-final_df = pd.concat([bow_df, vanguard_df], axis=1)
-
-user_question = [query]
-# search_start = time.time()
-sim_vecs, cosine_similarities = calculate_similarity(X, v, user_question)
-# search_time = time.time() - search_start
-# print("search time: {:.2f} ms".format(search_time * 1000))
-# print()
-# show_similar_documents(data, cosine_similarities, sim_vecs)
-final_df = final_df.iloc[sim_vecs]
-st.dataframe(final_df[['COMPANY', 'TOPIC', 'TITLE', 'DATE', 'LINK', 'CONTENT']])
+    user_question = [query]
+    sim_vecs, cosine_similarities = calculate_similarity(X, v, user_question)
+    
+    final_df = final_df.iloc[sim_vecs]
+    final_df = final_df[['company', 'topic', 'title', 'date', 'link', 'content']]
+    return final_df
